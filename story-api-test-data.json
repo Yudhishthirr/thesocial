@@ -1,0 +1,176 @@
+{
+  "example_1_image_story": {
+    "caption": "Just finished an amazing workout! 💪 #fitness #motivation",
+    "media": [
+      {
+        "url": "https://example.com/stories/image1.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      }
+    ],
+    "visibility": "followers",
+    "mentions": []
+  },
+  
+  "example_2_video_story": {
+    "caption": "Check out this sunset! 🌅",
+    "media": [
+      {
+        "url": "https://example.com/stories/video1.mp4",
+        "type": "video",
+        "width": 1080,
+        "height": 1920,
+        "durationMs": 15000,
+        "thumbnailUrl": "https://example.com/stories/video1-thumb.jpg"
+      }
+    ],
+    "visibility": "public",
+    "mentions": []
+  },
+  
+  "example_3_multiple_media": {
+    "caption": "My weekend adventure! 🏔️",
+    "media": [
+      {
+        "url": "https://example.com/stories/adventure1.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      },
+      {
+        "url": "https://example.com/stories/adventure2.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      },
+      {
+        "url": "https://example.com/stories/adventure-video.mp4",
+        "type": "video",
+        "width": 1080,
+        "height": 1920,
+        "durationMs": 20000,
+        "thumbnailUrl": "https://example.com/stories/adventure-video-thumb.jpg"
+      }
+    ],
+    "visibility": "followers",
+    "mentions": []
+  },
+  
+  "example_4_with_mentions": {
+    "caption": "Having coffee with @john and @sarah ☕",
+    "media": [
+      {
+        "url": "https://example.com/stories/coffee.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      }
+    ],
+    "visibility": "followers",
+    "mentions": [
+      "507f1f77bcf86cd799439011",
+      "507f191e810c19729de860ea"
+    ]
+  },
+  
+  "example_5_close_friends": {
+    "caption": "Behind the scenes! 🎬",
+    "media": [
+      {
+        "url": "https://example.com/stories/bts.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      }
+    ],
+    "visibility": "close_friends",
+    "mentions": []
+  },
+  
+  "example_6_with_custom_expiry": {
+    "caption": "Limited time offer! ⏰",
+    "media": [
+      {
+        "url": "https://example.com/stories/offer.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      }
+    ],
+    "visibility": "public",
+    "mentions": [],
+    "expiresAt": "2024-12-31T23:59:59.000Z"
+  },
+  
+  "example_7_minimal_required": {
+    "media": [
+      {
+        "url": "https://example.com/stories/simple.jpg",
+        "type": "image"
+      }
+    ]
+  },
+  
+  "example_8_video_without_thumbnail": {
+    "caption": "Quick update!",
+    "media": [
+      {
+        "url": "https://example.com/stories/update.mp4",
+        "type": "video",
+        "width": 1080,
+        "height": 1920,
+        "durationMs": 10000
+      }
+    ],
+    "visibility": "followers"
+  },
+  
+  "example_9_custom_visibility": {
+    "caption": "Private story for specific friends",
+    "media": [
+      {
+        "url": "https://example.com/stories/private.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      }
+    ],
+    "visibility": "custom",
+    "allowedUsers": [
+      "507f1f77bcf86cd799439011",
+      "507f191e810c19729de860ea",
+      "507f1f77bcf86cd799439012"
+    ],
+    "blockedUsers": [
+      "507f1f77bcf86cd799439013"
+    ]
+  },
+  
+  "example_10_complete_story": {
+    "caption": "Full feature story with everything! 🎉",
+    "media": [
+      {
+        "url": "https://example.com/stories/complete1.jpg",
+        "type": "image",
+        "width": 1080,
+        "height": 1920
+      },
+      {
+        "url": "https://example.com/stories/complete2.mp4",
+        "type": "video",
+        "width": 1080,
+        "height": 1920,
+        "durationMs": 25000,
+        "thumbnailUrl": "https://example.com/stories/complete2-thumb.jpg"
+      }
+    ],
+    "visibility": "public",
+    "mentions": [
+      "507f1f77bcf86cd799439011",
+      "507f191e810c19729de860ea"
+    ],
+    "expiresAt": "2024-12-25T12:00:00.000Z"
+  }
+}
+
