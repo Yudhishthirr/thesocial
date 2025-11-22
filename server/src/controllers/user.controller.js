@@ -28,7 +28,7 @@ const generateAccessAndRefereshTokens = async(userId) =>{
 const registerUser = async (req, res) => {
 
     const {fullName, email, username, password } = req.body
-    console.log(req.body);
+    // console.log(req.body);
     
     if ([fullName, email, username, password].some((field) => field?.trim() === "")) {
         throw new ApiError(400, "All fields are required")

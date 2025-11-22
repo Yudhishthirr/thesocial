@@ -2,6 +2,7 @@ import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
 import bodyParser from "body-parser"
+import { globalErrorHandler } from "./middlewares/error.middleware.js"
 const app = express()
 
 app.use(cors({
@@ -30,5 +31,8 @@ app.use("/api/v1/comments", commentRouter);
 app.use("/api/v1/like", likeRouter);
 app.use("/api/v1/follow", followRouter);
 app.use("/api/v1/story", storyRouter);
+
+
+app.use(globalErrorHandler);
 
 export { app }
