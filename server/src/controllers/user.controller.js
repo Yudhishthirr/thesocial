@@ -4,6 +4,9 @@ import bodyParser from "body-parser"
 import {User} from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import mongoose from "mongoose";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
+
 const app = express()
 
 app.use(bodyParser.json())
@@ -26,44 +29,77 @@ const generateAccessAndRefereshTokens = async(userId) =>{
 }
 
 const registerUser = async (req, res) => {
+  try {
+    const { fullName, email, username, password } = req.body;
 
-    const {fullName, email, username, password } = req.body
-    // console.log(req.body);
-    
-    if ([fullName, email, username, password].some((field) => field?.trim() === "")) {
-        throw new ApiError(400, "All fields are required")
+    // 1️⃣ Validate input fields
+    if ([fullName, email, username, password].some((item) => !item?.trim())) {
+      throw new ApiError(400, "All fields are required");
     }
 
-    
+    // 2️⃣ Check existing user
     const existedUser = await User.findOne({
-        $or: [{ username }, { email }]
-    })
+      $or: [{ email }, { username }],
+    });
 
     if (existedUser) {
-        throw new ApiError(409, "User with email or username already exists")
+      throw new ApiError(409, "User with email or username already exists");
     }
-   
 
+    // 3️⃣ Validate avatar file
+    const file = req.files?.AvtarImage?.[0];
+    if (!file) {
+      throw new ApiError(400, "Avatar image is required");
+    }
+
+    // 4️⃣ Upload avatar to Cloudinary
+    const uploadedAvatar = await uploadOnCloudinary(file.path);
+
+    if (!uploadedAvatar?.secure_url) {
+      throw new ApiError(500, "Avatar upload failed");
+    }
+
+    const avatarUrl = uploadedAvatar.secure_url;
+
+    // 5️⃣ Create user
     const user = await User.create({
-        username: username.toLowerCase(),
-        email, 
-        fullName,
-        password,
-    })
+      fullName,
+      email,
+      username: username.toLowerCase(),
+      password,
+      avatar: avatarUrl,
+    });
 
+    // 6️⃣ Remove password + refreshToken before sending response
     const createdUser = await User.findById(user._id).select(
-        "-password -refreshToken"
-    )
+      "-password -refreshToken"
+    );
 
     if (!createdUser) {
-        throw new ApiError(500, "Something went wrong while registering the user")
+      throw new ApiError(500, "Something went wrong while creating the user");
     }
 
-    return res.status(201).json(
-        new ApiResponse(200, createdUser, "User registered Successfully")
-    )
+    // 7️⃣ Final response
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(201, createdUser, "User registered successfully")
+      );
 
-}
+  } catch (error) {
+    console.error("Register Error:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json(
+        new ApiResponse(
+          error.statusCode || 500,
+          null,
+          error.message || "Internal server error"
+        )
+      );
+  }
+};
 
 
 const loginUser = async (req, res) =>{
@@ -167,4 +203,103 @@ const getCurrentUser = async(req,res)=>{
     ))
 }
 
-export {registerUser,loginUser,logoutUser,changeCurrentPassword,getCurrentUser}
+
+const getUserInfo = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized access");
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const userInfo = await User.aggregate([
+      {
+        $match: { _id: objectId }
+      },
+
+      // JOIN Follow collection
+      {
+        $lookup: {
+          from: "follows",
+          localField: "_id",
+          foreignField: "user",
+          as: "followData"
+        }
+      },
+
+      { 
+        $unwind: { 
+          path: "$followData",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+
+      // JOIN Posts collection
+      {
+        $lookup: {
+          from: "posts",
+          localField: "_id",
+          foreignField: "userId",
+          as: "posts"
+        }
+      },
+
+      // Add computed fields
+      {
+        $addFields: {
+          followersCount: { $size: { $ifNull: ["$followData.followers", []] } },
+          followingCount: { $size: { $ifNull: ["$followData.following", []] } },
+          postsCount: { $size: "$posts" }
+        }
+      },
+
+      // Final response formatting
+      {
+        $project: {
+          username: 1,
+          fullName: 1,
+          email: 1,
+          avatar: 1,
+          followersCount: 1,
+          followingCount: 1,
+          postsCount: 1,
+          posts: {
+            title: 1,
+            postUrl: 1,
+            createdAt: 1
+          }
+        }
+      }
+    ]);
+
+    if (!userInfo || userInfo.length === 0) {
+      throw new ApiError(404, "User not found");
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          userInfo[0],
+          "User info fetched successfully"
+        )
+      );
+
+  } catch (error) {
+    console.error("❌ getUserInfo Error:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json(
+        new ApiResponse(
+          error.statusCode || 500,
+          {},
+          error.message || "Internal server error"
+        )
+      );
+  }
+};
+export {registerUser,loginUser,logoutUser,changeCurrentPassword,getCurrentUser,getUserInfo}
