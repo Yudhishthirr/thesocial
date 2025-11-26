@@ -5,3 +5,5 @@ add alos your interst so that you can
 find your type girls
 
 add communities alos calling features
+
+never push this file to git

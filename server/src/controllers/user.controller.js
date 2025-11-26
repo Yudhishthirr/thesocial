@@ -84,7 +84,7 @@ const loginUser = async (req, res) =>{
     })
 
     if (!user) {
-        throw new ApiError(404, "User does not exist")
+        throw new ApiError(404, "Invalid credentials")
     }
 
    const isPasswordValid = await user.isPasswordCorrect(password)
