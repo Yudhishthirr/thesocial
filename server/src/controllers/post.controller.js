@@ -89,7 +89,7 @@ const postCreation = async (req, res, next) => {
       throw new ApiError(400, "Title is required");
     }
 
-    // Parse hashtags if sent as a string
+    
     if (typeof hashtags === "string") {
       try {
         hashtags = JSON.parse(hashtags);
@@ -102,7 +102,7 @@ const postCreation = async (req, res, next) => {
       throw new ApiError(400, "At least one hashtag is required");
     }
 
-    // Upload file to Cloudinary
+  
     let postUrl = null;
     const file = req.files?.postImage?.[0];
 
@@ -135,14 +135,90 @@ const postCreation = async (req, res, next) => {
   }
 };
 
+// const getPosts = async (req, res) => {
+//   const posts = await Post.find().sort({ createdAt: -1 }).lean();
+
+//   if (!Array.isArray(posts) || posts.length === 0) {
+//     return res.status(200).json(new ApiResponse(200, [], "No posts found"));
+//   }
+
+//   return res.status(200).json(new ApiResponse(200, posts, "Posts fetched successfully"));
+// };
+
 const getPosts = async (req, res) => {
-  const posts = await Post.find().sort({ createdAt: -1 }).lean();
+  try {
+    const posts = await Post.aggregate([
+      // Sort newest first
+      { $sort: { createdAt: -1 } },
 
-  if (!Array.isArray(posts) || posts.length === 0) {
-    return res.status(200).json(new ApiResponse(200, [], "No posts found"));
+      // 1️⃣ Join User
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+      { $unwind: "$user" },
+
+      // 2️⃣ Join Likes (get all likes for each post)
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "post",
+          as: "likes"
+        }
+      },
+
+      // 3️⃣ Join Comments
+      {
+        $lookup: {
+          from: "comments",
+          localField: "_id",
+          foreignField: "post",
+          as: "comments"
+        }
+      },
+
+      // 4️⃣ Add likeCount & commentCount
+      {
+        $addFields: {
+          likeCount: { $size: "$likes" },
+          commentCount: { $size: "$comments" }
+        }
+      },
+
+      // 5️⃣ Clean output
+      {
+        $project: {
+          title: 1,
+          postUrl: 1,
+          createdAt: 1,
+
+          likeCount: 1,
+          commentCount: 1,
+
+          user: {
+            _id: "$user._id",
+            username: "$user.username",
+            fullName: "$user.fullName",
+            avatar: "$user.avatar"
+          }
+        }
+      }
+    ]);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, posts, "Posts fetched successfully"));
+
+  } catch (error) {
+    return res
+      .status(error.statusCode || 500)
+      .json(new ApiResponse(500, null, error.message));
   }
-
-  return res.status(200).json(new ApiResponse(200, posts, "Posts fetched successfully"));
 };
 
 const getPostById = async (req, res) => {

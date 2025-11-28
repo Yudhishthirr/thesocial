@@ -260,6 +260,7 @@ const getUserInfo = async (req, res) => {
         $project: {
           username: 1,
           fullName: 1,
+          bio:1,
           email: 1,
           avatar: 1,
           followersCount: 1,
