@@ -5,87 +5,13 @@ import { Hashtags } from "../models/hashtage.model.js";
 import mongoose from "mongoose";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
-// const postCreation = async (req, res, next) => {
-//   try {
-//     let { title, postUrl, hashtags } = req.body;
-//     const userId = req.user?._id;
-
-//     // parse hashtags if they come as a string (common with multipart/form-data)
-//     let parsedHashtags = hashtags;
-//     if (typeof hashtags === "string") {
-//       // try JSON parse first (client may send '["a","b"]'), otherwise treat comma-separated
-//       try {
-//         parsedHashtags = JSON.parse(hashtags);
-//       } catch (_) {
-//         parsedHashtags = hashtags
-//           .split(",")
-//           .map((t) => t.trim())
-//           .filter(Boolean);
-//       }
-//     }
-
-//     // Validate basic inputs
-//     if (typeof title !== "string" || title.trim() === "") {
-//       throw new ApiError(400, "Title is required and must be a non-empty string");
-//     }
-//     if (typeof postUrl !== "string" || postUrl.trim() === "") {
-//       throw new ApiError(400, "Post URL is required and must be a non-empty string");
-//     }
-//     if (!Array.isArray(parsedHashtags) || parsedHashtags.length === 0) {
-//       throw new ApiError(400, "At least one hashtag is required");
-//     }
-//     if (!userId) {
-//       throw new ApiError(401, "User not found");
-//     }
-//     if (parsedHashtags.some((t) => typeof t !== "string" || t.trim() === "")) {
-//       throw new ApiError(400, "Invalid hashtag format");
-//     }
-
-//     // Handle file upload (if present)
-//     let imageUrl = null;
-//     try {
-//       const files = req.files || {};
-//       if (files.postImage && files.postImage[0]) {
-//         const localPath = files.postImage[0].path; // multer path
-//         const uploadResult = await uploadOnCloudinary(localPath);
-//         imageUrl = uploadResult?.secure_url || uploadResult?.url || null;
-//       }
-//     } catch (err) {
-//       // If the upload failed, bubble up a clear error (cloudinary cleanup is done in uploadOnCloudinary)
-//       console.error("Cloudinary upload error:", err);
-//       throw new ApiError(500, "Failed to upload image");
-//     }
-
-//     // Step 1: Create post (include imageUrl if present)
-//     const post = await Post.create({
-//       title: title.toLowerCase(),
-//       postUrl: postUrl.toLowerCase().trim(),
-//       userId: userId,
-//       imageUrl, // optional field on your schema; ensure Post schema supports this
-//     });
-
-//     if (!post) throw new ApiError(500, "Failed to create post");
-
-//     // Step 2: Create hashtags document linked to post
-//     const hashtagsDoc = await Hashtags.create({
-//       hashtags: parsedHashtags.map((tag) => tag.toLowerCase().trim()),
-//       postId: post._id,
-//     });
-
-//     return res
-//       .status(201)
-//       .json(new ApiResponse(201, "Post and Hashtags created successfully", { post, hashtagsDoc }));
-//   } catch (error) {
-//     // forward to express error handler middleware (or return ApiError)
-//     next(error);
-//   }
-// };
 const postCreation = async (req, res, next) => {
   try {
     let { title, hashtags } = req.body;
     const userId = req.user?._id;
+    console.log(title);
 
-    if (!title || typeof title !== "string") {
+    if (!title) {
       throw new ApiError(400, "Title is required");
     }
 
@@ -131,72 +57,150 @@ const postCreation = async (req, res, next) => {
     );
 
   } catch (error) {
-    next(error);
+    console.error("Post creation error:", error);
+    throw new ApiError(400, "Something went wrong while creating the post");
   }
 };
 
+
 // const getPosts = async (req, res) => {
-//   const posts = await Post.find().sort({ createdAt: -1 }).lean();
+//   try {
+//     const posts = await Post.aggregate([
+//       // Sort newest first
+//       { $sort: { createdAt: -1 } },
 
-//   if (!Array.isArray(posts) || posts.length === 0) {
-//     return res.status(200).json(new ApiResponse(200, [], "No posts found"));
+//       // 1️⃣ Join User
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "userId",
+//           foreignField: "_id",
+//           as: "user"
+//         }
+//       },
+//       { $unwind: "$user" },
+
+//       // 2️⃣ Join Likes (get all likes for each post)
+//       {
+//         $lookup: {
+//           from: "likes",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "likes"
+//         }
+//       },
+
+//       // 3️⃣ Join Comments
+//       {
+//         $lookup: {
+//           from: "comments",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "comments"
+//         }
+//       },
+
+//       // 4️⃣ Add likeCount & commentCount
+//       {
+//         $addFields: {
+//           likeCount: { $size: "$likes" },
+//           commentCount: { $size: "$comments" }
+//         }
+//       },
+
+//       // 5️⃣ Clean output
+//       {
+//         $project: {
+//           title: 1,
+//           postUrl: 1,
+//           createdAt: 1,
+
+//           likeCount: 1,
+//           commentCount: 1,
+
+//           user: {
+//             _id: "$user._id",
+//             username: "$user.username",
+//             fullName: "$user.fullName",
+//             avatar: "$user.avatar"
+//           }
+//         }
+//       }
+//     ]);
+
+//     return res
+//       .status(200)
+//       .json(new ApiResponse(200, posts, "Posts fetched successfully"));
+
+//   } catch (error) {
+//     return res
+//       .status(error.statusCode || 500)
+//       .json(new ApiResponse(500, null, error.message));
 //   }
-
-//   return res.status(200).json(new ApiResponse(200, posts, "Posts fetched successfully"));
 // };
 
 const getPosts = async (req, res) => {
   try {
+    const page = Number(req.query.page) || 1;   // <--- from query
+    const limit = 5;                            // posts per page
+    const skip = (page - 1) * limit;
+
+    // 1️⃣ Count all posts
+    const totalPosts = await Post.countDocuments();
+
+    // 2️⃣ Aggregation with pagination
     const posts = await Post.aggregate([
-      // Sort newest first
       { $sort: { createdAt: -1 } },
 
-      // 1️⃣ Join User
+      // Pagination added
+      { $skip: skip },
+      { $limit: limit },
+
+      // Join user
       {
         $lookup: {
           from: "users",
           localField: "userId",
           foreignField: "_id",
-          as: "user"
-        }
+          as: "user",
+        },
       },
       { $unwind: "$user" },
 
-      // 2️⃣ Join Likes (get all likes for each post)
+      // Join likes
       {
         $lookup: {
           from: "likes",
           localField: "_id",
           foreignField: "post",
-          as: "likes"
-        }
+          as: "likes",
+        },
       },
 
-      // 3️⃣ Join Comments
+      // Join comments
       {
         $lookup: {
           from: "comments",
           localField: "_id",
           foreignField: "post",
-          as: "comments"
-        }
+          as: "comments",
+        },
       },
 
-      // 4️⃣ Add likeCount & commentCount
+      // Counts
       {
         $addFields: {
           likeCount: { $size: "$likes" },
-          commentCount: { $size: "$comments" }
-        }
+          commentCount: { $size: "$comments" },
+        },
       },
 
-      // 5️⃣ Clean output
+      // Output clean
       {
         $project: {
           title: 1,
           postUrl: 1,
           createdAt: 1,
-
           likeCount: 1,
           commentCount: 1,
 
@@ -204,20 +208,23 @@ const getPosts = async (req, res) => {
             _id: "$user._id",
             username: "$user.username",
             fullName: "$user.fullName",
-            avatar: "$user.avatar"
-          }
-        }
-      }
+            avatar: "$user.avatar",
+          },
+        },
+      },
     ]);
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, posts, "Posts fetched successfully"));
+    // 3️⃣ Pagination Response
+    res.status(200).json({
+      posts,
+      nextPage: page + 1,
+      hasMore: skip + posts.length < totalPosts,
+    });
 
   } catch (error) {
-    return res
-      .status(error.statusCode || 500)
-      .json(new ApiResponse(500, null, error.message));
+    res.status(500).json({
+      message: error.message,
+    });
   }
 };
 
