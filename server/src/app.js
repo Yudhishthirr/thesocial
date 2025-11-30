@@ -23,6 +23,7 @@ import commentRouter from './routes/comment.routes.js'
 import likeRouter from './routes/like.routes.js'
 import followRouter from './routes/followers.routes.js'
 import storyRouter from './routes/story.routes.js'
+import blockRouter from './routes/block.routes.js'
 
 
 app.use("/api/v1/users", userRouter);
@@ -31,6 +32,8 @@ app.use("/api/v1/comments", commentRouter);
 app.use("/api/v1/like", likeRouter);
 app.use("/api/v1/follow", followRouter);
 app.use("/api/v1/story", storyRouter);
+
+app.use("/api/v1/block", blockRouter);
 
 
 app.use(globalErrorHandler);

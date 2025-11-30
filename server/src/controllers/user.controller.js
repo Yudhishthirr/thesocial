@@ -4,8 +4,12 @@ import bodyParser from "body-parser"
 import {User} from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
-import mongoose from "mongoose";
+import mongoose, { get } from "mongoose";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+
+import {POWER_TYPE, ACCOUNT_TYPES} from "../models/user.model.js"
+
+import {FollowRequest, REQUEST_STATUS} from "../models/followRequest.model.js"
 
 const app = express()
 
@@ -204,17 +208,9 @@ const getCurrentUser = async(req,res)=>{
 }
 
 
-const getUserInfo = async (req, res) => {
-  try {
-    const userId = req.user?._id;
+async function getUserbyId(objectId){
 
-    if (!userId) {
-      throw new ApiError(401, "Unauthorized access");
-    }
-
-    const objectId = new mongoose.Types.ObjectId(userId);
-
-    const userInfo = await User.aggregate([
+   const userInfo = await User.aggregate([
       {
         $match: { _id: objectId }
       },
@@ -261,6 +257,7 @@ const getUserInfo = async (req, res) => {
           username: 1,
           fullName: 1,
           bio:1,
+          accountType:1,
           email: 1,
           avatar: 1,
           followersCount: 1,
@@ -274,6 +271,21 @@ const getUserInfo = async (req, res) => {
         }
       }
     ]);
+    return userInfo;
+}
+
+// only for logged in user
+const getUserInfo = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized access");
+    }
+
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const userInfo = await getUserbyId(objectId);
 
     if (!userInfo || userInfo.length === 0) {
       throw new ApiError(404, "User not found");
@@ -303,4 +315,152 @@ const getUserInfo = async (req, res) => {
       );
   }
 };
-export {registerUser,loginUser,logoutUser,changeCurrentPassword,getCurrentUser,getUserInfo}
+
+const searchUser = async (req, res) => {
+  try {
+    const { q } = req.params;
+    if (!q) return res.json([]);
+
+    const userInfo = await User.aggregate([
+      {
+        $facet: {
+          // 1️⃣ Username starts with (highest priority)
+          usernameStarts: [
+            { $match: { username: { $regex: "^" + q, $options: "i" } } },
+            { $limit: 10 },
+            { $project: { username: 1, fullName: 1, avatar: 1 } }
+          ],
+
+          // 2️⃣ Full name starts with
+          nameStarts: [
+            { $match: { fullName: { $regex: "^" + q, $options: "i" } } },
+            { $limit: 10 },
+            { $project: { username: 1, fullName: 1, avatar: 1 } }
+          ],
+
+          // 3️⃣ Contains match (lower priority)
+          contains: [
+            { 
+              $match: { 
+                $or: [
+                  { username: { $regex: q, $options: "i" } },
+                  { fullName: { $regex: q, $options: "i" } },
+                ]
+              }
+            },
+            { $limit: 10 },
+            { $project: { username: 1, fullName: 1, avatar: 1 } }
+          ],
+        }
+      },
+
+      // Remove duplicates + merge priority results
+      {
+        $project: {
+          result: {
+            $setUnion: ["$usernameStarts", "$nameStarts", "$contains"]
+          }
+        }
+      },
+
+      // Limit final response
+      {
+        $project: {
+          result: { $slice: ["$result", 20] }
+        }
+      }
+    ]);
+
+    if (!userInfo || userInfo.length === 0) {
+      throw new ApiError(404, "User not found");
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          userInfo[0],
+          "User info fetched successfully"
+        )
+      );
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Search error" });
+  }
+};
+
+
+
+
+
+const getUserByIddemo = async (req, res) => {
+  try {
+    const currentUserId = req.user?._id;
+    const currentUserPowerType = req.user?.accountPower;
+    console.log("Current User Power Type:", currentUserPowerType);
+    const { targetUserId } = req.params;
+
+    if (!currentUserId) {
+      throw new ApiError(401, "Unauthorized access");
+    }
+
+    if (!mongoose.isValidObjectId(targetUserId)) {
+      throw new ApiError(400, "Invalid Object Id");
+    }
+
+    const targetUser = await getUserbyId(new mongoose.Types.ObjectId(targetUserId));
+   
+    if (!targetUser || targetUser.length === 0) {
+      throw new ApiError(404, "User not found");
+    }
+
+    if(currentUserPowerType == (POWER_TYPE.ULTRA || POWER_TYPE.PRO)){
+      return res
+      .status(200)
+      .json(new ApiResponse(200, { user: targetUser, message: "You are piryoty" }));
+    }
+
+    if (targetUser[0].accountType === ACCOUNT_TYPES.PRIVATE){
+      const followRequest = await FollowRequest.findOne({
+        sender: currentUserId,
+        receiver: targetUserId,
+      });
+
+      if(followRequest?.status == REQUEST_STATUS.ACCEPTED) {
+        return res
+        .status(200)
+        .json(new ApiResponse(200, {user: targetUser, message: "request accepted"}));
+      }
+      if (followRequest?.status === REQUEST_STATUS.PENDING) {
+        return res
+        .status(200)
+        .json(new ApiResponse(200, { user: targetUser, message: "Follow request pending" }));
+      }
+      else{
+        throw new ApiError(404, "This account is private request follow to see the profile");
+      }
+
+    }else{
+       return res
+       .status(200)
+       .json(new ApiResponse(200, { user: targetUser, message: "Account is public" }));
+    }  
+  } catch (error) {
+    console.error("❌ getUserById Error:", error);
+    return res.status(error.statusCode || 500).json(
+      new ApiResponse(error.statusCode || 500, {}, error.message || "Internal server error")
+    );
+  }
+};
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  changeCurrentPassword,
+  getCurrentUser,
+  getUserInfo,
+  searchUser,
+  getUserByIddemo
+}

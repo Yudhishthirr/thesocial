@@ -2,6 +2,20 @@ import mongoose, {Schema} from "mongoose";
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
 
+
+export const ACCOUNT_TYPES = {
+  PRIVATE: "private",
+  PUBLIC: "public",
+};
+
+export const POWER_TYPE = {
+  ULTRA: "ultra",
+  PRO: "pro",
+  BASIC: "basic",
+};
+
+
+
 const userSchema = new Schema(
     {
         username: {
@@ -18,6 +32,16 @@ const userSchema = new Schema(
             unique: true,
             lowecase: true,
             trim: true, 
+        },
+        accountType: {
+            type: String,
+            enum: ACCOUNT_TYPES,
+            default: ACCOUNT_TYPES.PRIVATE,
+        },
+        accountPower:{
+            type:String,
+            enum:POWER_TYPE,
+            default:POWER_TYPE.BASIC,
         },
         fullName: {
             type: String,
@@ -80,4 +104,4 @@ userSchema.methods.generateRefreshToken = function(){
     )
 }
 
-export const User = mongoose.model("User", userSchema)
+export const User = mongoose.model("User", userSchema);
