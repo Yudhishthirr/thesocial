@@ -106,7 +106,65 @@ const getComments = async (req, res) => {
       throw new ApiError(400, "Invalid Id");
     }
   
-    const Comments = await Comment.find({ post: id });
+    // const Comments = await Comment.find({ post: id });
+   const Comments = await Comment.aggregate([
+  {
+    $match: {
+      post: new mongoose.Types.ObjectId(req.params.id),
+    },
+  },
+
+  // 1️⃣ Lookup likes for each comment
+  {
+    $lookup: {
+      from: "likes",
+      localField: "_id",
+      foreignField: "comment",
+      as: "likes",
+    },
+  },
+
+  // 2️⃣ Lookup owner (user) details
+  {
+    $lookup: {
+      from: "users",
+      localField: "owner",
+      foreignField: "_id",
+      as: "user",
+    },
+  },
+  { $unwind: "$user" },
+
+  // 3️⃣ Add likeCount + isLiked fields
+  {
+    $addFields: {
+      likeCount: { $size: "$likes" },
+      isLiked: {
+        $in: [
+          new mongoose.Types.ObjectId(req.user._id),
+          "$likes.likedBy",
+        ],
+      },
+
+      // Pick only small data for user
+      ownerData: {
+        username: "$user.username",
+        avatar: "$user.avatar",
+      },
+    },
+  },
+
+  // 4️⃣ Final clean projection
+  {
+    $project: {
+      likes: 0,  // remove raw likes array
+      user: 0,   // remove full user doc
+    },
+  },
+
+  // 5️⃣ Sort comments: newest first
+  { $sort: { createdAt: -1 } },
+]);
     console.log(Comments)
 
     if (!Array.isArray(Comments) || Comments.length === 0) {
@@ -118,7 +176,7 @@ const getComments = async (req, res) => {
   
     return res
       .status(200)
-      .json(new ApiResponse(200, "Comments fetched successfully", Comments));
+      .json(new ApiResponse(200, Comments));
   };
   
 

@@ -208,73 +208,176 @@ const getCurrentUser = async(req,res)=>{
 }
 
 
-async function getUserbyId(objectId){
+// async function getUserbyId(objectId){
 
-   const userInfo = await User.aggregate([
-      {
-        $match: { _id: objectId }
-      },
+//    const userInfo = await User.aggregate([
+//       {
+//         $match: { _id: objectId }
+//       },
 
-      // JOIN Follow collection
-      {
-        $lookup: {
-          from: "follows",
-          localField: "_id",
-          foreignField: "user",
-          as: "followData"
-        }
-      },
+//       // JOIN Follow collection
+//       {
+//         $lookup: {
+//           from: "follows",
+//           localField: "_id",
+//           foreignField: "user",
+//           as: "followData"
+//         }
+//       },
 
-      { 
-        $unwind: { 
-          path: "$followData",
-          preserveNullAndEmptyArrays: true
-        }
-      },
+//       { 
+//         $unwind: { 
+//           path: "$followData",
+//           preserveNullAndEmptyArrays: true
+//         }
+//       },
 
-      // JOIN Posts collection
-      {
-        $lookup: {
-          from: "posts",
-          localField: "_id",
-          foreignField: "userId",
-          as: "posts"
-        }
-      },
+//       // JOIN Posts collection
+//       {
+//         $lookup: {
+//           from: "posts",
+//           localField: "_id",
+//           foreignField: "userId",
+//           as: "posts"
+//         }
+//       },
 
-      // Add computed fields
-      {
-        $addFields: {
-          followersCount: { $size: { $ifNull: ["$followData.followers", []] } },
-          followingCount: { $size: { $ifNull: ["$followData.following", []] } },
-          postsCount: { $size: "$posts" }
-        }
-      },
+//       // Add computed fields
+//       {
+//         $addFields: {
+//           followersCount: { $size: { $ifNull: ["$followData.followers", []] } },
+//           followingCount: { $size: { $ifNull: ["$followData.following", []] } },
+//           postsCount: { $size: "$posts" }
+//         }
+//       },
 
-      // Final response formatting
-      {
-        $project: {
-          username: 1,
-          fullName: 1,
-          bio:1,
-          accountType:1,
-          email: 1,
-          avatar: 1,
-          followersCount: 1,
-          followingCount: 1,
-          postsCount: 1,
-          posts: {
-            title: 1,
-            postUrl: 1,
-            createdAt: 1
-          }
-        }
-      }
-    ]);
-    return userInfo;
-}
+//       // Final response formatting
+//       {
+//         $project: {
+//           username: 1,
+//           fullName: 1,
+//           bio:1,
+//           accountType:1,
+//           email: 1,
+//           avatar: 1,
+//           followersCount: 1,
+//           followingCount: 1,
+//           postsCount: 1,
+//           posts: {
+//             title: 1,
+//             postUrl: 1,
+//             createdAt: 1
+//           }
+//         }
+//       }
+//     ]);
+//     return userInfo;
+// }
 
 // only for logged in user
+
+
+async function getUserbyId(objectId) {
+  const userInfo = await User.aggregate([
+    {
+      $match: { _id: objectId }
+    },
+
+    // JOIN Follow collection
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "user",
+        as: "followData"
+      }
+    },
+
+    {
+      $unwind: {
+        path: "$followData",
+        preserveNullAndEmptyArrays: true
+      }
+    },
+
+    // JOIN followers user data
+    {
+      $lookup: {
+        from: "users",
+        localField: "followData.followers",
+        foreignField: "_id",
+        as: "followersList"
+      }
+    },
+
+    // JOIN following user data
+    {
+      $lookup: {
+        from: "users",
+        localField: "followData.following",
+        foreignField: "_id",
+        as: "followingList"
+      }
+    },
+
+    // JOIN posts (user posts)
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "userId",
+        as: "posts"
+      }
+    },
+
+    // Add computed fields
+    {
+      $addFields: {
+        followersCount: { $size: { $ifNull: ["$followersList", []] } },
+        followingCount: { $size: { $ifNull: ["$followingList", []] } },
+        postsCount: { $size: "$posts" }
+      }
+    },
+
+    // Final response formatting
+    {
+      $project: {
+        username: 1,
+        fullName: 1,
+        bio: 1,
+        accountType: 1,
+        email: 1,
+        avatar: 1,
+
+        followersCount: 1,
+        followingCount: 1,
+
+        // return actual followers + following user data
+        followersList: {
+          _id: 1,
+          username: 1,
+          avatar: 1
+        },
+        followingList: {
+          _id: 1,
+          username: 1,
+          avatar: 1
+        },
+
+        postsCount: 1,
+        posts: {
+          title: 1,
+          postUrl: 1,
+          createdAt: 1
+        }
+      }
+    }
+  ]);
+
+  return userInfo;
+}
+
+
 const getUserInfo = async (req, res) => {
   try {
     const userId = req.user?._id;

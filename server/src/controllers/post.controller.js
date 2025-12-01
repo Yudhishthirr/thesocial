@@ -63,81 +63,6 @@ const postCreation = async (req, res, next) => {
 };
 
 
-// const getPosts = async (req, res) => {
-//   try {
-//     const posts = await Post.aggregate([
-//       // Sort newest first
-//       { $sort: { createdAt: -1 } },
-
-//       // 1️⃣ Join User
-//       {
-//         $lookup: {
-//           from: "users",
-//           localField: "userId",
-//           foreignField: "_id",
-//           as: "user"
-//         }
-//       },
-//       { $unwind: "$user" },
-
-//       // 2️⃣ Join Likes (get all likes for each post)
-//       {
-//         $lookup: {
-//           from: "likes",
-//           localField: "_id",
-//           foreignField: "post",
-//           as: "likes"
-//         }
-//       },
-
-//       // 3️⃣ Join Comments
-//       {
-//         $lookup: {
-//           from: "comments",
-//           localField: "_id",
-//           foreignField: "post",
-//           as: "comments"
-//         }
-//       },
-
-//       // 4️⃣ Add likeCount & commentCount
-//       {
-//         $addFields: {
-//           likeCount: { $size: "$likes" },
-//           commentCount: { $size: "$comments" }
-//         }
-//       },
-
-//       // 5️⃣ Clean output
-//       {
-//         $project: {
-//           title: 1,
-//           postUrl: 1,
-//           createdAt: 1,
-
-//           likeCount: 1,
-//           commentCount: 1,
-
-//           user: {
-//             _id: "$user._id",
-//             username: "$user.username",
-//             fullName: "$user.fullName",
-//             avatar: "$user.avatar"
-//           }
-//         }
-//       }
-//     ]);
-
-//     return res
-//       .status(200)
-//       .json(new ApiResponse(200, posts, "Posts fetched successfully"));
-
-//   } catch (error) {
-//     return res
-//       .status(error.statusCode || 500)
-//       .json(new ApiResponse(500, null, error.message));
-//   }
-// };
 
 const getPosts = async (req, res) => {
   try {
@@ -227,6 +152,121 @@ const getPosts = async (req, res) => {
     });
   }
 };
+
+
+// 
+
+
+// alos with follow filter
+// const getPosts = async (req, res) => {
+//   try {
+//     const currentUserId = req.user?._id;
+//     const page = Number(req.query.page) || 1;
+//     const limit = 5;
+//     const skip = (page - 1) * limit;
+
+//     const totalPosts = await Post.countDocuments();
+
+//     const posts = await Post.aggregate([
+//       { $sort: { createdAt: -1 } },
+//       { $skip: skip },
+//       { $limit: limit },
+
+//       // Join user
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "userId",
+//           foreignField: "_id",
+//           as: "user",
+//         },
+//       },
+//       { $unwind: "$user" },
+
+//       // Join author follow data
+//       {
+//         $lookup: {
+//           from: "follows",
+//           localField: "user._id",
+//           foreignField: "user",
+//           as: "followData",
+//         },
+//       },
+//       { $unwind: { path: "$followData", preserveNullAndEmptyArrays: true } },
+
+//       // FIX: Always use array for followers
+//       {
+//         $addFields: {
+//           isFollower: {
+//             $in: [
+//               currentUserId,
+//               { $ifNull: ["$followData.followers", []] }
+//             ]
+//           }
+//         }
+//       },
+
+//       // Only show if current user follows the account
+//       { $match: { isFollower: true } },
+
+//       // likes lookup
+//       {
+//         $lookup: {
+//           from: "likes",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "likes",
+//         },
+//       },
+
+//       // comments
+//       {
+//         $lookup: {
+//           from: "comments",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "comments",
+//         },
+//       },
+
+//       // counts
+//       {
+//         $addFields: {
+//           likeCount: { $size: "$likes" },
+//           commentCount: { $size: "$comments" },
+//         },
+//       },
+
+//       // clean output
+//       {
+//         $project: {
+//           title: 1,
+//           postUrl: 1,
+//           createdAt: 1,
+//           likeCount: 1,
+//           commentCount: 1,
+//           user: {
+//             _id: "$user._id",
+//             username: "$user.username",
+//             fullName: "$user.fullName",
+//             avatar: "$user.avatar",
+//           },
+//         },
+//       },
+//     ]);
+
+//     res.status(200).json({
+//       posts,
+//       nextPage: page + 1,
+//       hasMore: skip + posts.length < totalPosts,
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// };
+
+
 
 const getPostById = async (req, res) => {
   const { id } = req.params;
