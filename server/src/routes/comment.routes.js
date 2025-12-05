@@ -8,7 +8,7 @@ const router = Router();
 router.use(verifyJWT); 
 
 
-router.route("/add-comment/:postId").post(addComment)
+router.route("/add-comment/:postId").post(verifyJWT,addComment)
 router.route("/update-comment/:commentId").patch(updateComment)
 router.route("/delete-comment/:commentId").get(deleteComment)
 router.route("/get-comment/:id").get(getComments)

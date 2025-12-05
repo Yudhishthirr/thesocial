@@ -4,7 +4,7 @@ import {FollowRequest} from "../models/followRequest.model.js"
 import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-
+import { Notification,NOTIFICATION_TYPES,entityTypeOptions} from "../models/notification.model.js"
 import {ACCOUNT_TYPES} from "../models/user.model.js"
 
 const toggleFollow = async (req, res) => {
@@ -41,10 +41,34 @@ const toggleFollow = async (req, res) => {
           .json(new ApiResponse(200, existingRequest, "Follow request already sent"));
       }
       
-      const SendFollowRequest = await FollowRequest.create({
+      const FollowRequestID = await FollowRequest.create({
         sender: followerId,
         receiver:followingId,
       });
+
+      if (followerId.toString() != followingId) {
+
+        const existingNotif = await Notification.findOne({
+            receiver: followingId,
+            sender: followerId,
+            type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
+            entityType: entityTypeOptions.FOLLOW,
+            entityId: FollowRequestID._id,
+        });
+
+
+        if (!existingNotif) {
+          await Notification.create({
+            receiver: followingId,
+            sender: followerId,
+            type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
+            entityType: entityTypeOptions.FOLLOW,
+            entityId: FollowRequestID._id,
+          });
+        }
+      }
+      
+      
       return res
         .status(200)
         .json(new ApiResponse(200, null, "follow request send succssfully"));

@@ -4,8 +4,8 @@ import {togglePostLike,toggleCommentLike} from "../controllers/like.controller.j
 const router = Router();
 router.use(verifyJWT); 
 
-router.route("/toggle/p/:postId").get(togglePostLike);
-router.route("/toggle/c/:commentId").get(toggleCommentLike);
+router.route("/toggle/p/:postId").get(verifyJWT,togglePostLike);
+router.route("/toggle/c/:commentId").get(verifyJWT,toggleCommentLike);
 // router.route("/get-like-post").get(getLikedPost);
 // router.route("/toggle/t/:tweetId").get(toggleTweetLike);
 
