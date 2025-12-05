@@ -1,6 +1,7 @@
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Post } from "../models/post.model.js";
+import { Follow } from "../models/followers.model.js";
 import { Hashtags } from "../models/hashtage.model.js";
 import mongoose from "mongoose";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
@@ -64,20 +65,130 @@ const postCreation = async (req, res, next) => {
 
 
 
+// const getPosts = async (req, res) => {
+//   try {
+//     const page = Number(req.query.page) || 1;   // <--- from query
+//     const limit = 5;                            // posts per page
+//     const skip = (page - 1) * limit;
+
+//     // 1️⃣ Count all posts
+//     const totalPosts = await Post.countDocuments();
+
+//     // 2️⃣ Aggregation with pagination
+//     const posts = await Post.aggregate([
+//       { $sort: { createdAt: -1 } },
+
+//       // Pagination added
+//       { $skip: skip },
+//       { $limit: limit },
+
+//       // Join user
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "userId",
+//           foreignField: "_id",
+//           as: "user",
+//         },
+//       },
+//       { $unwind: "$user" },
+
+//       // Join likes
+//       {
+//         $lookup: {
+//           from: "likes",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "likes",
+//         },
+//       },
+
+//       // Join comments
+//       {
+//         $lookup: {
+//           from: "comments",
+//           localField: "_id",
+//           foreignField: "post",
+//           as: "comments",
+//         },
+//       },
+
+//       // Counts
+//       {
+//         $addFields: {
+//           likeCount: { $size: "$likes" },
+//           commentCount: { $size: "$comments" },
+//         },
+//       },
+
+//       // Output clean
+//       {
+//         $project: {
+//           title: 1,
+//           postUrl: 1,
+//           createdAt: 1,
+//           likeCount: 1,
+//           commentCount: 1,
+
+//           user: {
+//             _id: "$user._id",
+//             username: "$user.username",
+//             fullName: "$user.fullName",
+//             avatar: "$user.avatar",
+//           },
+//         },
+//       },
+//     ]);
+
+//     // 3️⃣ Pagination Response
+//     res.status(200).json({
+//       posts,
+//       nextPage: page + 1,
+//       hasMore: skip + posts.length < totalPosts,
+//     });
+
+//   } catch (error) {
+//     res.status(500).json({
+//       message: error.message,
+//     });
+//   }
+// };
+
+
 const getPosts = async (req, res) => {
   try {
-    const page = Number(req.query.page) || 1;   // <--- from query
-    const limit = 5;                            // posts per page
+    const currentUserId = req.user._id;
+
+    // 1️⃣ Get following users list
+    const followDoc = await Follow.findOne({ user: currentUserId });
+
+    const followingUsers = followDoc?.following || []; // array of ObjectIds
+
+    // If user is following no one → return empty posts
+    if (followingUsers.length === 0) {
+      return res.status(200).json({
+        posts: [],
+        nextPage: null,
+        hasMore: false,
+      });
+    }
+
+    const page = Number(req.query.page) || 1;
+    const limit = 5;
     const skip = (page - 1) * limit;
 
-    // 1️⃣ Count all posts
-    const totalPosts = await Post.countDocuments();
+    // 2️⃣ Count only followed users' posts
+    const totalPosts = await Post.countDocuments({
+      userId: { $in: followingUsers },
+    });
 
-    // 2️⃣ Aggregation with pagination
+    // 3️⃣ Aggregation with filter + pagination
     const posts = await Post.aggregate([
+      // Only posts from followed users
+      { $match: { userId: { $in: followingUsers } } },
+
       { $sort: { createdAt: -1 } },
 
-      // Pagination added
       { $skip: skip },
       { $limit: limit },
 
@@ -112,7 +223,6 @@ const getPosts = async (req, res) => {
         },
       },
 
-      // Counts
       {
         $addFields: {
           likeCount: { $size: "$likes" },
@@ -120,7 +230,6 @@ const getPosts = async (req, res) => {
         },
       },
 
-      // Output clean
       {
         $project: {
           title: 1,
@@ -128,7 +237,6 @@ const getPosts = async (req, res) => {
           createdAt: 1,
           likeCount: 1,
           commentCount: 1,
-
           user: {
             _id: "$user._id",
             username: "$user.username",
@@ -139,7 +247,7 @@ const getPosts = async (req, res) => {
       },
     ]);
 
-    // 3️⃣ Pagination Response
+    // 4️⃣ Pagination Response
     res.status(200).json({
       posts,
       nextPage: page + 1,
@@ -152,119 +260,6 @@ const getPosts = async (req, res) => {
     });
   }
 };
-
-
-// 
-
-
-// alos with follow filter
-// const getPosts = async (req, res) => {
-//   try {
-//     const currentUserId = req.user?._id;
-//     const page = Number(req.query.page) || 1;
-//     const limit = 5;
-//     const skip = (page - 1) * limit;
-
-//     const totalPosts = await Post.countDocuments();
-
-//     const posts = await Post.aggregate([
-//       { $sort: { createdAt: -1 } },
-//       { $skip: skip },
-//       { $limit: limit },
-
-//       // Join user
-//       {
-//         $lookup: {
-//           from: "users",
-//           localField: "userId",
-//           foreignField: "_id",
-//           as: "user",
-//         },
-//       },
-//       { $unwind: "$user" },
-
-//       // Join author follow data
-//       {
-//         $lookup: {
-//           from: "follows",
-//           localField: "user._id",
-//           foreignField: "user",
-//           as: "followData",
-//         },
-//       },
-//       { $unwind: { path: "$followData", preserveNullAndEmptyArrays: true } },
-
-//       // FIX: Always use array for followers
-//       {
-//         $addFields: {
-//           isFollower: {
-//             $in: [
-//               currentUserId,
-//               { $ifNull: ["$followData.followers", []] }
-//             ]
-//           }
-//         }
-//       },
-
-//       // Only show if current user follows the account
-//       { $match: { isFollower: true } },
-
-//       // likes lookup
-//       {
-//         $lookup: {
-//           from: "likes",
-//           localField: "_id",
-//           foreignField: "post",
-//           as: "likes",
-//         },
-//       },
-
-//       // comments
-//       {
-//         $lookup: {
-//           from: "comments",
-//           localField: "_id",
-//           foreignField: "post",
-//           as: "comments",
-//         },
-//       },
-
-//       // counts
-//       {
-//         $addFields: {
-//           likeCount: { $size: "$likes" },
-//           commentCount: { $size: "$comments" },
-//         },
-//       },
-
-//       // clean output
-//       {
-//         $project: {
-//           title: 1,
-//           postUrl: 1,
-//           createdAt: 1,
-//           likeCount: 1,
-//           commentCount: 1,
-//           user: {
-//             _id: "$user._id",
-//             username: "$user.username",
-//             fullName: "$user.fullName",
-//             avatar: "$user.avatar",
-//           },
-//         },
-//       },
-//     ]);
-
-//     res.status(200).json({
-//       posts,
-//       nextPage: page + 1,
-//       hasMore: skip + posts.length < totalPosts,
-//     });
-
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
 
 
 

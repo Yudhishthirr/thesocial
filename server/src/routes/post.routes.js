@@ -12,7 +12,7 @@ router.route("/create").post(
   postCreation
 );
 
-router.route("/get-posts").get(getPosts);
+router.route("/get-posts").get(verifyJWT,getPosts);
 router.route("/get-post/:id").get(getPostById);
 router.route("/delete-post/:id").get(deletePostById);
 

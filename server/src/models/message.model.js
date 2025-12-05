@@ -13,76 +13,58 @@ export const MESSAGE_TYPE = {
 
 const messageSchema = new Schema(
   {
+    // 🔥 MOST IMPORTANT FIELD
+    conversation: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Conversation",
+      required: true,
+    },
+
     sender: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
 
-    recipient: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-
-    // Type of message (text, post share etc.)
     messageType: {
       type: String,
       enum: Object.values(MESSAGE_TYPE),
       required: true,
       default: MESSAGE_TYPE.TEXT,
     },
-
-    // Text message body
-    text: {
+    text:{
       type: String,
-      default: "",
     },
 
-    // For sharing content
     sharedPost: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Post",
-      default: null,
     },
+
     sharedStory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Story",
-      default: null,
     },
 
-
-    // Reply functionality
     replyTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
-      default: null,
     },
 
-    // Message status (sent/read)
     status: {
       type: String,
       enum: Object.values(MESSAGE_STATUS),
       default: MESSAGE_STATUS.SENT,
     },
 
-    // Delete options like Instagram
-    isDeletedForSender: {
-      type: Boolean,
-      default: false,
-    },
-    isDeletedForReceiver: {
-      type: Boolean,
-      default: false,
-    },
-    isDeletedForEveryone: {
-      type: Boolean,
-      default: false,
-    },
+    deletedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 export default mongoose.model("Message", messageSchema);

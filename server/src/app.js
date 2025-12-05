@@ -25,6 +25,7 @@ import followRouter from './routes/followers.routes.js'
 import storyRouter from './routes/story.routes.js'
 import blockRouter from './routes/block.routes.js'
 import messageRouter from "./routes/message.routes.js";
+import conversationRouter from "./routes/conversation.route.js";
 
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/posts", postRouter);
@@ -35,6 +36,7 @@ app.use("/api/v1/story", storyRouter);
 
 app.use("/api/v1/block", blockRouter);
 app.use("/api/v1/messages", messageRouter);
+app.use("/api/v1/conversation", conversationRouter);
 
 app.use(globalErrorHandler);
 
