@@ -1,50 +1,40 @@
 import mongoose from "mongoose";
-import { Story } from "../models/story.model.js";
+import { Story, visibilityTypes } from "../models/story.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { Comment } from "../models/comment.model.js";
+import {commentOn} from "../models/comment.model.js";
 
-// Create a new story (supports multiple media items)
-const postCreation = async (req, res) => {
-  const userId = req.user._id
-  const {
-    caption,
-    media,
-    visibility = "followers",
-    mentions = [],
-    expiresAt, // optional custom expiry
-  } = req.body;
-  console.log(req.body)
+import { Follow } from "../models/followers.model.js";
+
+const addStory = async (req, res) => {
+  
+  const userId = req.user?._id;
+  let FileUrl = null;
+
   if (!userId) {
     throw new ApiError(401, "Unauthorized");
   }
 
-  if (!Array.isArray(media) || media.length === 0) {
-    throw new ApiError(400, "At least one media item is required");
+  const {caption, mentions = []} = req.body;
+  const file = req.files?.MediaFile?.[0];
+ 
+  // console.log("Caption:", caption);
+  // console.log("Mentions:", mentions);
+ 
+  if (!file) {
+    throw new ApiError(400, "MediaFile is required");
   }
-
-  const normalizedMedia = media.map((m) => ({
-    url: String(m.url || "").trim(),
-    type: m.type === "video" ? "video" : "image",
-    width: m.width,
-    height: m.height,
-    durationMs: m.durationMs,
-    thumbnailUrl: m.thumbnailUrl ? String(m.thumbnailUrl).trim() : undefined,
-  }));
-
-  if (normalizedMedia.some((m) => !m.url)) {
-    throw new ApiError(400, "Media url is required");
-  }
-
-//   // default expiry 24h if not provided
-  const expiry = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
+  const uploaded = await uploadOnCloudinary(file.path);
+  FileUrl = uploaded.secure_url;  // <<< SAVE THIS IN DB
+ 
+  // Create story
   const story = await Story.create({
     author: userId,
-    caption: caption?.trim?.() || undefined,
-    media: normalizedMedia,
-    visibility,
+    caption: caption?.trim(),
+    mediaUrl: FileUrl.trim(),
     mentions,
-    expiresAt: expiry,
   });
 
   return res
@@ -52,29 +42,55 @@ const postCreation = async (req, res) => {
     .json(new ApiResponse(201, story, "Story created successfully"));
 };
 
-// Mark story as viewed by current user (idempotent)
-const viewStoy = async (req, res) => {
+
+const viewStory = async (req, res) => {
   const userId = req.user?._id;
   const { storyId } = req.params;
 
-  if (!userId) throw new ApiError(401, "Unauthorized");
-  if (!mongoose.isValidObjectId(storyId)) throw new ApiError(400, "Invalid story id");
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  if (!mongoose.isValidObjectId(storyId)) {
+    throw new ApiError(400, "Invalid story id");
+  }
 
   const story = await Story.findById(storyId);
-  if (!story) throw new ApiError(404, "Story not found");
+  if (!story) {
+    throw new ApiError(404, "Story not found");
+  }
 
-  // avoid duplicate viewer entries
-  const alreadyViewed = story.viewers.some((v) => v.user.equals(userId));
+  // ⚠️ If user is the author → do not count view
+  if (story.author.equals(userId)) {
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { viewCount: story.viewCount },
+        "Owner viewing their own story"
+      )
+    );
+  }
+
+  // Check if already viewed
+  const alreadyViewed = story.viewers.some((viewerId) =>
+    viewerId.equals(userId)
+  );
+
   if (!alreadyViewed) {
-    story.viewers.push({ user: userId, viewedAt: new Date() });
-    story.viewCount = story.viewers.length;
+    story.viewers.push(userId);        // Add viewer
+    story.viewCount = story.viewers.length;  // Update count
     await story.save();
   }
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, { viewCount: story.viewCount }, "Marked as viewed"));
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { viewCount: story.viewCount },
+      "Marked as viewed"
+    )
+  );
 };
+
 
 // // Add or update a reaction (one per user)
 const reactStory = async (req, res) => {
@@ -109,42 +125,104 @@ const addCommentStory = async (req, res) => {
   const { text } = req.body;
 
   if (!userId) throw new ApiError(401, "Unauthorized");
-  if (!mongoose.isValidObjectId(storyId)) throw new ApiError(400, "Invalid story id");
-  if (!text || !String(text).trim()) throw new ApiError(400, "Comment text is required");
+
+  if (!mongoose.isValidObjectId(storyId))
+    throw new ApiError(400, "Invalid story id");
+
+  if (!text || !String(text).trim())
+    throw new ApiError(400, "Comment text is required");
 
   const story = await Story.findById(storyId);
   if (!story) throw new ApiError(404, "Story not found");
 
-  story.comments.push({ user: userId, text: String(text).trim(), createdAt: new Date() });
-  story.commentCount = story.comments.length;
+  if (story.author.equals(userId)) {
+    throw new ApiError(403, "You cannot comment on your own story");
+  }
+
+  // 1️⃣ Create comment in Comment collection
+  const newComment = await Comment.create({
+    content: String(text).trim(),
+    commentOnType: commentOn.STORY,
+    commentOnId: storyId,
+    owner: userId,
+  });
+
+  // 2️⃣ Update comment count in story
+  story.commentCount += 1;
   await story.save();
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, story.comments[story.comments.length - 1], "Comment added"));
+  return res.status(201).json(
+    new ApiResponse(
+      201,
+      newComment,
+      "Comment added successfully"
+    )
+  );
 };
 
 
-const deleteStory = async (req,res)=>{
-    const userId = req.user?._id;
-    const { storyId } = req.params;
+const getFollowingStories = async (req, res) => {
+  const userId = req.user?._id;
 
-    if (!userId) throw new ApiError(401, "Unauthorized");
-    if (!mongoose.isValidObjectId(storyId)) throw new ApiError(400, "Invalid story id");
+  if (!userId) throw new ApiError(401, "Unauthorized");
 
-    const story = await Story.findOne({_id:storyId,author:userId});
-    if (!story) throw new ApiError(404, "Story not found");
+  // 1️⃣ Get list of users current user is following
+  const followDoc = await Follow.findOne({ user: userId });
 
-    await Story.findByIdAndDelete(storyId);
+  const followingUsers = followDoc?.following || [];
 
-    return res
+ 
+  const allowedAuthors = [...followingUsers, userId];
+  
+
+  // // 3️⃣ Fetch stories with visibility rules & not expired
+  const stories = await Story.find({
+    author: { $in: allowedAuthors },
+    expiresAt: { $gt: new Date() }, // not expired
+    $or: [
+      { visibility: visibilityTypes.FOLLOWERS },
+    ]
+  }).populate("author", "username fullName avatar accountType")
+    .select("author caption mentions mediaUrl visibility createdAt")
+    .sort({ createdAt: -1 });
+
+  return res
     .status(200)
-    .json(new ApiResponse(200, null, "Story deleted successfully"));
-
-}
-
+    .json(new ApiResponse(200, stories, "Stories fetched successfully"));
+};
 
 
-export {postCreation,viewStoy,reactStory,addCommentStory,deleteStory}
+const deleteStory = async (req, res) => {
+  const userId = req.user?._id;
+  const { storyId } = req.params;
+
+  if (!userId) throw new ApiError(401, "Unauthorized");
+  if (!mongoose.isValidObjectId(storyId))
+    throw new ApiError(400, "Invalid story id");
+
+  // ✔ Validate story & ownership
+  const story = await Story.findOne({ _id: storyId, author: userId });
+  if (!story) {
+    throw new ApiError(404, "Story not found or unauthorized");
+  }
+
+  // 1️⃣ Delete the story
+  await Story.findByIdAndDelete(storyId);
+
+  // 2️⃣ Delete comments linked to this story
+  await Comment.deleteMany({
+    commentOnType: "Story",
+    commentOnId: storyId,
+  });
+
+  return res.status(200).json(
+    new ApiResponse(200, null, "Story deleted successfully")
+  );
+};
+
+
+
+
+export {addStory,viewStory,reactStory,addCommentStory,deleteStory,getFollowingStories}
 
 

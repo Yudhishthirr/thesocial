@@ -1,4 +1,6 @@
 import { Block } from "../models/block.model.js";
+import { Story } from "../models/story.model.js";
+import { ApiError } from "../utils/ApiError.js";
 
 export const checkBlock = async (req, res, next) => {
   try {
@@ -8,7 +10,15 @@ export const checkBlock = async (req, res, next) => {
     const { followingId } = req.body || {};
     const { targetUserId, storyId } = req.params || {};
 
-    let targetUser = followingId || targetUserId || null;
+    let targetUser = followingId || targetUserId || storyId || null;
+    if (storyId) {
+      const story = await Story.findById(storyId).select("author");
+      if (!story) {
+        return next(new ApiError(404, "Story not found"));
+      }
+      targetUser = story.author;
+    }
+    
 
 
     console.log("Checking block between:", currentUser, "and", targetUser);
