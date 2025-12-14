@@ -1,10 +1,10 @@
 
 import express from "express"
 import bodyParser from "body-parser"
-import {User} from "../models/user.model.js"
+import {User,GENDER_TYPES} from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
-import mongoose, { get } from "mongoose";
+import mongoose from "mongoose";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 import {POWER_TYPE, ACCOUNT_TYPES} from "../models/user.model.js"
@@ -34,13 +34,16 @@ const generateAccessAndRefereshTokens = async(userId) =>{
 
 const registerUser = async (req, res) => {
   try {
-    const { fullName, email, username, password } = req.body;
+    const { fullName, email, username, password,gender } = req.body;
 
     // 1️⃣ Validate input fields
-    if ([fullName, email, username, password].some((item) => !item?.trim())) {
+    if ([fullName, email, username, password,gender].some((item) => !item?.trim())) {
       throw new ApiError(400, "All fields are required");
     }
 
+    if(gender !== GENDER_TYPES.MALE && gender !== GENDER_TYPES.FEMALE){
+        throw new ApiError(400, "Invalid gender type");
+    }
     // 2️⃣ Check existing user
     const existedUser = await User.findOne({
       $or: [{ email }, { username }],
@@ -70,6 +73,7 @@ const registerUser = async (req, res) => {
       fullName,
       email,
       username: username.toLowerCase(),
+      gender:gender.toLowerCase(),
       password,
       avatar: avatarUrl,
     });
@@ -521,7 +525,7 @@ const getUserByIddemo = async (req, res) => {
     if(currentUserPowerType == (POWER_TYPE.ULTRA || POWER_TYPE.PRO)){
       return res
       .status(200)
-      .json(new ApiResponse(200, { user: targetUser, message: "You are piryoty" }));
+      .json(new ApiResponse(200,targetUser[0], "You are piryoty"));
     }
 
     if (targetUser[0].accountType === ACCOUNT_TYPES.PRIVATE){
@@ -533,12 +537,12 @@ const getUserByIddemo = async (req, res) => {
       if(followRequest?.status == REQUEST_STATUS.ACCEPTED) {
         return res
         .status(200)
-        .json(new ApiResponse(200, {user: targetUser, message: "request accepted"}));
+        .json(new ApiResponse(200,targetUser[0],"request accepted"));
       }
       if (followRequest?.status === REQUEST_STATUS.PENDING) {
         return res
         .status(200)
-        .json(new ApiResponse(200, { user: targetUser, message: "Follow request pending" }));
+        .json(new ApiResponse(200, targetUser[0],"Follow request pending"));
       }
       else{
         throw new ApiError(404, "This account is private request follow to see the profile");
@@ -547,7 +551,7 @@ const getUserByIddemo = async (req, res) => {
     }else{
        return res
        .status(200)
-       .json(new ApiResponse(200, { user: targetUser, message: "Account is public" }));
+       .json(new ApiResponse(200,targetUser[0], "Account is public"));
     }  
   } catch (error) {
     console.error("❌ getUserById Error:", error);

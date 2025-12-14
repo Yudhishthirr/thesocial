@@ -14,6 +14,10 @@ export const POWER_TYPE = {
   BASIC: "basic",
 };
 
+export const GENDER_TYPES = {
+    MALE: "male",
+    FEMALE:"female",
+}
 
 
 const userSchema = new Schema(
@@ -33,21 +37,15 @@ const userSchema = new Schema(
             lowecase: true,
             trim: true, 
         },
-        accountType: {
-            type: String,
-            enum: ACCOUNT_TYPES,
-            default: ACCOUNT_TYPES.PRIVATE,
-        },
-        accountPower:{
-            type:String,
-            enum:POWER_TYPE,
-            default:POWER_TYPE.BASIC,
-        },
         fullName: {
             type: String,
             required: true,
             trim: true, 
             index: true
+        },
+        gender:{
+            type: String,
+            enum:GENDER_TYPES,
         },
         boi:{
             type: String,
@@ -58,6 +56,16 @@ const userSchema = new Schema(
         password: {
             type: String,
             required: [true, 'Password is required']
+        },
+        accountType: {
+            type: String,
+            enum: ACCOUNT_TYPES,
+            default: ACCOUNT_TYPES.PRIVATE,
+        },
+        accountPower:{
+            type:String,
+            enum:POWER_TYPE,
+            default:POWER_TYPE.BASIC,
         },
         refreshToken: {
             type: String

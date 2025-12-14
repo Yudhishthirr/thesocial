@@ -7,8 +7,8 @@ export const checkBlock = async (req, res, next) => {
 
     const currentUser = req.user._id;
 
-    const { followingId } = req.body || {};
-    const { targetUserId, storyId } = req.params || {};
+    // const { followingId } = req.body || {};
+    const { targetUserId, storyId,followingId } = req.params || {};
 
     let targetUser = followingId || targetUserId || storyId || null;
     if (storyId) {

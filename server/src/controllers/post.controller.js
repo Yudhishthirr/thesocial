@@ -65,20 +65,41 @@ const postCreation = async (req, res, next) => {
 
 
 
+
 // const getPosts = async (req, res) => {
 //   try {
-//     const page = Number(req.query.page) || 1;   // <--- from query
-//     const limit = 5;                            // posts per page
+//     const currentUserId = req.user._id;
+
+//     // 1️⃣ Get following users list
+//     const followDoc = await Follow.findOne({ user: currentUserId });
+
+//     const followingUsers = followDoc?.following || []; // array of ObjectIds
+
+//     // If user is following no one → return empty posts
+//     if (followingUsers.length === 0) {
+//       return res.status(200).json({
+//         posts: [],
+//         nextPage: null,
+//         hasMore: false,
+//       });
+//     }
+
+//     const page = Number(req.query.page) || 1;
+//     const limit = 5;
 //     const skip = (page - 1) * limit;
 
-//     // 1️⃣ Count all posts
-//     const totalPosts = await Post.countDocuments();
+//     // 2️⃣ Count only followed users' posts
+//     const totalPosts = await Post.countDocuments({
+//       userId: { $in: followingUsers },
+//     });
 
-//     // 2️⃣ Aggregation with pagination
+//     // 3️⃣ Aggregation with filter + pagination
 //     const posts = await Post.aggregate([
+//       // Only posts from followed users
+//       { $match: { userId: { $in: followingUsers } } },
+
 //       { $sort: { createdAt: -1 } },
 
-//       // Pagination added
 //       { $skip: skip },
 //       { $limit: limit },
 
@@ -113,7 +134,6 @@ const postCreation = async (req, res, next) => {
 //         },
 //       },
 
-//       // Counts
 //       {
 //         $addFields: {
 //           likeCount: { $size: "$likes" },
@@ -121,7 +141,6 @@ const postCreation = async (req, res, next) => {
 //         },
 //       },
 
-//       // Output clean
 //       {
 //         $project: {
 //           title: 1,
@@ -129,7 +148,6 @@ const postCreation = async (req, res, next) => {
 //           createdAt: 1,
 //           likeCount: 1,
 //           commentCount: 1,
-
 //           user: {
 //             _id: "$user._id",
 //             username: "$user.username",
@@ -140,7 +158,7 @@ const postCreation = async (req, res, next) => {
 //       },
 //     ]);
 
-//     // 3️⃣ Pagination Response
+//     // 4️⃣ Pagination Response
 //     res.status(200).json({
 //       posts,
 //       nextPage: page + 1,
@@ -154,41 +172,31 @@ const postCreation = async (req, res, next) => {
 //   }
 // };
 
-
 const getPosts = async (req, res) => {
   try {
     const currentUserId = req.user._id;
 
     // 1️⃣ Get following users list
     const followDoc = await Follow.findOne({ user: currentUserId });
+    const followingUsers = followDoc?.following || [];
 
-    const followingUsers = followDoc?.following || []; // array of ObjectIds
-
-    // If user is following no one → return empty posts
-    if (followingUsers.length === 0) {
-      return res.status(200).json({
-        posts: [],
-        nextPage: null,
-        hasMore: false,
-      });
-    }
+    // Include current user's own posts
+    const allowedUsers = [...followingUsers, currentUserId];
 
     const page = Number(req.query.page) || 1;
     const limit = 5;
     const skip = (page - 1) * limit;
 
-    // 2️⃣ Count only followed users' posts
+    // 2️⃣ Count posts of followed + own posts
     const totalPosts = await Post.countDocuments({
-      userId: { $in: followingUsers },
+      userId: { $in: allowedUsers },
     });
 
-    // 3️⃣ Aggregation with filter + pagination
+    // 3️⃣ Aggregation
     const posts = await Post.aggregate([
-      // Only posts from followed users
-      { $match: { userId: { $in: followingUsers } } },
+      { $match: { userId: { $in: allowedUsers } } },
 
       { $sort: { createdAt: -1 } },
-
       { $skip: skip },
       { $limit: limit },
 
@@ -247,7 +255,6 @@ const getPosts = async (req, res) => {
       },
     ]);
 
-    // 4️⃣ Pagination Response
     res.status(200).json({
       posts,
       nextPage: page + 1,
@@ -260,7 +267,6 @@ const getPosts = async (req, res) => {
     });
   }
 };
-
 
 
 const getPostById = async (req, res) => {

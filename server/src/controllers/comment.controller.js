@@ -25,14 +25,14 @@ const addComment = async (req, res) => {
     content: comment,
     commentOnType: commentOn.POST,
     commentOnId: postId,
-    owner: user_id
+    commnetowner: user_id
   });
 
-  if (!commentres.owner.equals(user_id)) {
+  if (!commentres.commnetowner.equals(user_id)) {
 
     // ❗ Check if notification already exists
     const existingNotif = await Notification.findOne({
-      receiver: comment.owner,
+      receiver: comment.commnetowner,
       sender: user_id,
       type: NOTIFICATION_TYPES.COMMENT_ADDED,
       entityType: entityTypeOptions.COMMENT,
@@ -42,7 +42,7 @@ const addComment = async (req, res) => {
     // ❗ Only create notification if NONE exists
     if (!existingNotif) {
       await Notification.create({
-        receiver: comment.owner,
+        receiver: comment.commnetowner,
         sender: user_id,
         type: NOTIFICATION_TYPES.COMMENT_ADDED,
         entityType: entityTypeOptions.COMMENT,
@@ -119,90 +119,179 @@ const deleteComment = async (req, res) => {
   }
 }
 
-const getComments = async (req, res) => {
+// const getCommentsByPostId = async (req, res) => {
 
-  const { id } = req.params;
-  console.log(id)
-  if (!id) {
-    throw new ApiError(400, "Id is required");
-  }
+//   const { id } = req.params;
+//   console.log(id)
+//   if (!id) {
+//     throw new ApiError(400, "Id is required");
+//   }
 
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw new ApiError(400, "Invalid Id");
-  }
+//   if (!mongoose.Types.ObjectId.isValid(id)) {
+//     throw new ApiError(400, "Invalid Post Id");
+//   }
 
-  // const Comments = await Comment.find({ post: id });
-  const Comments = await Comment.aggregate([
-    {
-      $match: {
-        post: new mongoose.Types.ObjectId(req.params.id),
-      },
-    },
+//   // const Comments = await Comment.find({ post: id });
+//   const Comments = await Comment.aggregate([
+//     {
+//       $match: {
+//         post: new mongoose.Types.ObjectId(req.params.id),
+//       },
+//     },
 
-    // 1️⃣ Lookup likes for each comment
-    {
-      $lookup: {
-        from: "likes",
-        localField: "_id",
-        foreignField: "comment",
-        as: "likes",
-      },
-    },
+//     // 1️⃣ Lookup likes for each comment
+//     {
+//       $lookup: {
+//         from: "likes",
+//         localField: "_id",
+//         foreignField: "comment",
+//         as: "likes",
+//       },
+//     },
 
-    // 2️⃣ Lookup owner (user) details
-    {
-      $lookup: {
-        from: "users",
-        localField: "owner",
-        foreignField: "_id",
-        as: "user",
-      },
-    },
-    { $unwind: "$user" },
+//     // 2️⃣ Lookup owner (user) details
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "owner",
+//         foreignField: "_id",
+//         as: "user",
+//       },
+//     },
+//     { $unwind: "$user" },
 
-    // 3️⃣ Add likeCount + isLiked fields
-    {
-      $addFields: {
-        likeCount: { $size: "$likes" },
-        isLiked: {
-          $in: [
-            new mongoose.Types.ObjectId(req.user._id),
-            "$likes.likedBy",
-          ],
+//     // 3️⃣ Add likeCount + isLiked fields
+//     {
+//       $addFields: {
+//         likeCount: { $size: "$likes" },
+//         isLiked: {
+//           $in: [
+//             new mongoose.Types.ObjectId(req.user._id),
+//             "$likes.likedBy",
+//           ],
+//         },
+
+//         // Pick only small data for user
+//         ownerData: {
+//           username: "$user.username",
+//           avatar: "$user.avatar",
+//         },
+//       },
+//     },
+
+//     // 4️⃣ Final clean projection
+//     {
+//       $project: {
+//         likes: 0,  // remove raw likes array
+//         user: 0,   // remove full user doc
+//       },
+//     },
+
+//     // 5️⃣ Sort comments: newest first
+//     { $sort: { createdAt: -1 } },
+//   ]);
+//   console.log(Comments)
+
+//   if (!Array.isArray(Comments) || Comments.length === 0) {
+//     return res
+//       .status(200)
+//       .json(new ApiResponse(200, [], "No posts found"));
+//   }
+
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, Comments));
+// };
+
+
+const getCommentsByPostId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new ApiError(400, "Post Id is required");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Invalid Post Id");
+    }
+
+    const post = await Post.findById(id);
+    if (!post) {
+      throw new ApiError(404, "Post not found with the given Id");
+    }
+    const Comments = await Comment.aggregate([
+      // 1️⃣ Match comments only for this Post
+      {
+        $match: {
+          commentOnType: "Post",
+          commentOnId: new mongoose.Types.ObjectId(id),
         },
+      },
 
-        // Pick only small data for user
-        ownerData: {
-          username: "$user.username",
-          avatar: "$user.avatar",
+      // 2️⃣ Lookup all likes for each comment
+      {
+        $lookup: {
+          from: "likes",
+          localField: "_id",
+          foreignField: "comment",
+          as: "likes",
         },
       },
-    },
 
-    // 4️⃣ Final clean projection
-    {
-      $project: {
-        likes: 0,  // remove raw likes array
-        user: 0,   // remove full user doc
+      // 3️⃣ Lookup owner (user) details
+      {
+        $lookup: {
+          from: "users",
+          localField: "commnetowner",
+          foreignField: "_id",
+          as: "user",
+        },
       },
-    },
+      { $unwind: "$user" },
 
-    // 5️⃣ Sort comments: newest first
-    { $sort: { createdAt: -1 } },
-  ]);
-  console.log(Comments)
+      // 4️⃣ Add likeCount + isLiked + clean user fields
+      {
+        $addFields: {
+          likeCount: { $size: "$likes" },
+          isLiked: {
+            $in: [
+              new mongoose.Types.ObjectId(req.user._id),
+              "$likes.likedBy",
+            ],
+          },
+          ownerData: {
+            username: "$user.username",
+            avatar: "$user.avatar",
+          },
+        },
+      },
 
-  if (!Array.isArray(Comments) || Comments.length === 0) {
+      // 5️⃣ Clean output
+      {
+        $project: {
+          likes: 0,
+          user: 0,
+        },
+      },
+
+      // 6️⃣ Sort newest first
+      { $sort: { createdAt: -1 } },
+    ]);
+
+    if (!Comments.length) {
+      return res.status(200).json(new ApiResponse(200, [], "No comments found"));
+    }
+
+    return res.status(200).json(new ApiResponse(200, Comments));
+
+  } catch (error) {
     return res
-      .status(200)
-      .json(new ApiResponse(200, [], "No posts found"));
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
   }
-
-
-  return res
-    .status(200)
-    .json(new ApiResponse(200, Comments));
 };
 
 
-export { addComment, updateComment, deleteComment, getComments }
+export { addComment, updateComment, deleteComment, getCommentsByPostId }

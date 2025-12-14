@@ -162,33 +162,60 @@ const addCommentStory = async (req, res) => {
 
 
 const getFollowingStories = async (req, res) => {
-  const userId = req.user?._id;
+  const userId = req.user._id;
 
   if (!userId) throw new ApiError(401, "Unauthorized");
 
-  // 1️⃣ Get list of users current user is following
+  // 1️⃣ Get following
   const followDoc = await Follow.findOne({ user: userId });
-
   const followingUsers = followDoc?.following || [];
 
- 
+  // 2️⃣ allowed authors
   const allowedAuthors = [...followingUsers, userId];
-  
 
-  // // 3️⃣ Fetch stories with visibility rules & not expired
+  // 3️⃣ Fetch stories
   const stories = await Story.find({
     author: { $in: allowedAuthors },
-    expiresAt: { $gt: new Date() }, // not expired
-    $or: [
-      { visibility: visibilityTypes.FOLLOWERS },
-    ]
-  }).populate("author", "username fullName avatar accountType")
+    expiresAt: { $gt: new Date() },
+    visibility: visibilityTypes.FOLLOWERS
+  })
+    .populate("author", "username fullName avatar accountType")
     .select("author caption mentions mediaUrl visibility createdAt")
     .sort({ createdAt: -1 });
 
+  // 4️⃣ Group stories inside author object
+  const grouped = new Map();
+
+  for (const story of stories) {
+    const authorId = story.author._id.toString();
+
+    if (!grouped.has(authorId)) {
+      grouped.set(authorId, {
+        author: {
+          _id: story.author._id,
+          username: story.author.username,
+          fullName: story.author.fullName,
+          avatar: story.author.avatar,
+          accountType: story.author.accountType,
+          stories: []  // story array inside author
+        }
+      });
+    }
+
+    grouped.get(authorId).author.stories.push({
+      _id: story._id,
+      caption: story.caption,
+      mediaUrl: story.mediaUrl,
+      mentions: story.mentions,
+      createdAt: story.createdAt
+    });
+  }
+
+  const finalResponse = Array.from(grouped.values());
+
   return res
     .status(200)
-    .json(new ApiResponse(200, stories, "Stories fetched successfully"));
+    .json(new ApiResponse(200, finalResponse, "Stories fetched successfully"));
 };
 
 

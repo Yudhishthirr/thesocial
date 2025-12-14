@@ -12,8 +12,9 @@ import {ACCOUNT_TYPES} from "../models/user.model.js"
 const toggleFollow = async (req, res) => {
   try {
     const followerId = req.user._id;     // person who clicks follow (sender)
-    const { followingId } = req.body;    // person being followed
-
+    // const { followingId } = req.body;    // person being followed
+    const {followingId}  = req.params;
+    console.log("want to follow this user",followingId);
 
     if (!mongoose.isValidObjectId(followingId)) {
       throw new ApiError(400, "Invalid following Id");

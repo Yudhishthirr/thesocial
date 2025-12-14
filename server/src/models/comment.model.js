@@ -27,7 +27,7 @@ const commentSchema = new Schema(
             refPath: "commentOnType" // <-- Magic, Mongoose decides model automatically
         },
 
-        owner: {
+        commnetowner: {
             type: Schema.Types.ObjectId,
             ref: "User",
             required: true
