@@ -67,6 +67,10 @@ const userSchema = new Schema(
             enum:POWER_TYPE,
             default:POWER_TYPE.BASIC,
         },
+        isOnline:{
+            type:Boolean,
+            default:false,
+        },
         refreshToken: {
             type: String
         }

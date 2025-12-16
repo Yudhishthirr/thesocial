@@ -2,7 +2,7 @@ import dotenv from "dotenv"
 import connectDB from "./db/dbconfig.js";
 import {app} from './app.js'
 import { createServer } from "http";
-import { initSocket } from "./socket/socket.js";
+import { initSocket } from "./utils/socket/socket.js";
 
 dotenv.config({
     path: './.env'

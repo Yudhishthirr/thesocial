@@ -1,5 +1,6 @@
 
 import Conversation, { conversationTypes } from "../models/conversation.model.js";
+import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
@@ -15,6 +16,10 @@ const createDirectConversation = async (req, res) => {
       throw new ApiError(400, "Cannot chat with yourself");
     }
 
+    const checkUserExsit = await User.findById(otherUserId);
+    if(!checkUserExsit){
+      throw new ApiError(400, "User not found");
+    }
     // 1. Find if DM already exists
     let conversation = await Conversation.findOne({
       conversationTypes: conversationTypes.DIRECT,

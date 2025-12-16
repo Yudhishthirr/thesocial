@@ -12,7 +12,7 @@ import { Router } from 'express';
 const router = Router();
 
 // Send a message
-router.post("/:conversationId", verifyJWT,sendMessage);
+router.post("/", verifyJWT,sendMessage);
 
 // Get all messages of a conversation
 router.get("/:conversationId",verifyJWT, getMessages);

@@ -2,33 +2,69 @@
 
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import Conversation from "../models/conversation.model.js";
+import Conversation,{ conversationTypes } from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import {MESSAGE_STATUS} from "../models/message.model.js";
+import { getIO,activeUsers } from "../utils/socket/socket.js";
+
+
+
+
 
 
 const sendMessage = async (req, res) => {
   try {
-    const { conversationId } = req.params;
     const senderId = req.user._id;
-    const { text, messageType, sharedPost, sharedStory, replyTo } = req.body;
+    const {
+      text,
+      messageType,
+      sharedPost,
+      sharedStory,
+      replyTo,
+      conversationId,
+      otherUserId,
+    } = req.body;
 
-    // 1. Check conversation exists
-    const conversation = await Conversation.findById(conversationId);
+    let conversation;
+    console.log("conversationId",conversationId)
+    console.log("otherUserId",otherUserId)
+    // 1️⃣ If conversationId exists → use it
+    if (conversationId) {
+      conversation = await Conversation.findById(conversationId);
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+    }
+
+    // 2️⃣ If NO conversation → first message → find or create DIRECT chat
     if (!conversation) {
-      throw new ApiError(400, "Conversation not found");
-      // return res.status(404).json({ message: "" });
+
+      if (!otherUserId) {
+        throw new ApiError(400, "otherUserId is required for first message");
+      }
+
+      conversation = await Conversation.findOne({
+        conversationTypes: "DIRECT",
+        participants: { $all: [senderId, otherUserId] },
+      });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          conversationTypes: "DIRECT",
+          participants: [senderId, otherUserId],
+        });
+      }
     }
 
-    // 2. Check if user is part of conversation
-    if (!conversation.participants.includes(senderId)) {
-       throw new ApiError(400, "Thrid Person Not allowed");
-      // return res.status(403).json({ message: "Not allowed" });
+    // 3️⃣ Security check
+    if (!conversation.participants.some(id => id.equals(senderId))) {
+      throw new ApiError(403, "Third person not allowed");
     }
 
-    // 3. Create message
+    // 4️⃣ Create message (IMPORTANT FIX)
     const message = await Message.create({
-      conversation: conversationId,
+      conversation: conversation._id, // ❗ FIXED
       sender: senderId,
       text,
       messageType,
@@ -37,22 +73,61 @@ const sendMessage = async (req, res) => {
       replyTo,
     });
 
-    // 4. Update last message in conversation
+    // 5️⃣ Update lastMessage
     conversation.lastMessage = message._id;
     await conversation.save();
 
-    // 5. Populate sender for frontend
     const populated = await message.populate("sender", "username avatar");
 
-    res.status(201).json(populated);
-    return res
-      .status(200)
-      .json(new ApiResponse(200,populated,"message data"));
+      // 🔥 6️⃣ SOCKET EMIT (THIS IS WHAT YOU ASKED)
+    const io = getIO();
+
+    const receivers = conversation.participants.filter(
+      (id) => !id.equals(senderId)
+    );
+
+    receivers.forEach((receiverId) => {
+      io.to(receiverId.toString()).emit("receive_message", {
+        conversationId: conversation._id,
+        message: populated,
+      });
+    });
+    
+
+    // 🔥 SOCKET EMIT (FIXED)
+    // const io = getIO();
+
+    // const receivers = conversation.participants.filter(
+    //   (id) => !id.equals(senderId)
+    // );
+
+    // receivers.forEach((receiverId) => {
+    //   const receiverSockets = activeUsers.get(receiverId.toString());
+
+    //   if (receiverSockets) {
+    //     receiverSockets.forEach((socketId) => {
+    //       io.to(socketId).emit("receive_message", {
+    //         conversationId: conversation._id,
+    //         message: populated,
+    //       });
+    //     });
+    //   }
+    // });
+
+
+    return res.status(201).json(
+      new ApiResponse(201, {
+        conversationId: conversation._id,
+        message: populated,
+      }, "Message sent successfully")
+    );
+
   } catch (error) {
     console.error("Send Message Error:", error);
-    throw new ApiError(400, error);
+    throw new ApiError(400, error.message || "Send message failed");
   }
 };
+
 
 const getMessages = async (req, res) => {
   try {
@@ -62,7 +137,10 @@ const getMessages = async (req, res) => {
     // Check conversation exists
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
-      throw new ApiError(400, "Conversation not found");
+      // throw new ApiError(400, "Conversation not found");
+      conversation = await Conversation.create({
+          participants: [userId, otherUserId],
+      });
     }
 
     // Check user is participant

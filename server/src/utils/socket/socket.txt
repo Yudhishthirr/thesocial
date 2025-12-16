@@ -1,0 +1,162 @@
+import { Server } from "socket.io";
+import {User}  from "../../models/user.model.js";
+
+// Map to store active users and their socket IDs
+const activeUsers = new Map();
+
+// Map to track typing users
+const typingUsers = new Map();
+
+const initSocket = (server) => {
+    const io = new Server(server, {
+        cors: {
+            origin: "*",
+            methods: ["GET", "POST"]
+        },
+        pingTimeout: 60000 // disconnect after 60 sec of inactivity
+    });
+
+    // when a client connects and this (connection) event used in frontend to call socket
+    io.on("connection", (socket) => {
+        console.log("New client connected: ", socket.id);
+
+        // handle user connection and mark them as active in db
+        // (frontend emit event 'user_connected' after successful login and send userId)
+        socket.on("user_connected", async (userId) => {
+            try {
+                socket.userId = userId; // 🔥 IMPORTANT: Store userId on socket instance
+                activeUsers.set(userId, socket.id);
+                socket.join(userId); // join room with userId
+                console.log(`User connected: ${userId}`);
+
+                // Update user status in DB
+                await User.findByIdAndUpdate(userId, { isOnline: true });
+
+                // notify all clients about the updated active users list
+                io.emit("active_users", { userId: userId, isOnline: true });
+            } catch (error) {
+                console.error("Error in user_connected:", error);
+            }
+        });
+
+        // return online users status of requested users
+        socket.on("get_online_users", (requestedUserId, callback) => {
+            const isOnline = activeUsers.has(requestedUserId);
+            callback({ userId: requestedUserId, isOnline: isOnline });
+        });
+
+        // send message to receiver if online
+        socket.on("send_message", async (message) => {
+            try {
+                const receiverSocketId = activeUsers.get(message.receiverId);
+                if (receiverSocketId) {
+                    io.to(receiverSocketId).emit("receive_message", message);
+                }
+            } catch (error) {
+                console.error("Error in send_message:", error);
+                socket.emit("error", { message: "Failed to send message." });
+            }
+        });
+
+        // update message status as read (FOR NOW PENDING THIS FEATURE)
+
+        // handle typing indicator
+        socket.on("typing", ({ conversationId, receiverId }) => {
+            if (!conversationId || !receiverId) return;
+
+            const userId = socket.userId; // FIX: Get userId from socket instance
+            if (!userId) return;
+
+            if (!typingUsers.has(userId)) typingUsers.set(userId, {});
+
+            const userTyping = typingUsers.get(userId);
+            userTyping[conversationId] = true;
+
+            // clear any existing timer
+            if (userTyping[`${conversationId}_timer`]) {
+                clearTimeout(userTyping[`${conversationId}_timer`]);
+            }
+
+            // auto stop typing after 3 sec of inactivity
+            userTyping[`${conversationId}_timer`] = setTimeout(() => {
+                userTyping[conversationId] = false;
+                socket.to(receiverId).emit("user_typing", { // FIX: Typo corrected
+                    userId,
+                    conversationId,
+                    isTyping: false
+                });
+            }, 3000);
+
+            // notify receiver
+            socket.to(receiverId).emit("user_typing", { // FIX: Typo corrected
+                userId,
+                conversationId,
+                isTyping: true
+            });
+        });
+
+        // handle user stop typing
+        socket.on("stop_typing", ({ conversationId, receiverId }) => {
+            if (!conversationId || !receiverId) return;
+
+            const userId = socket.userId; // FIX: Get userId from socket instance
+            if (!userId) return;
+
+            if (!typingUsers.has(userId)) typingUsers.set(userId, {});
+
+            const userTyping = typingUsers.get(userId);
+            userTyping[conversationId] = false;
+
+            if (userTyping[`${conversationId}_timer`]) {
+                clearTimeout(userTyping[`${conversationId}_timer`]);
+                delete userTyping[`${conversationId}_timer`];
+            }
+
+            // notify receiver
+            socket.to(receiverId).emit("user_typing", { // FIX: Typo corrected
+                userId,
+                conversationId,
+                isTyping: false
+            });
+        });
+
+        // handle user disconnection and mark them as offline in db
+        socket.on("disconnect", async () => {
+            const userId = socket.userId; // FIX: Get userId from socket instance
+            if (!userId) return;
+
+            try {
+                activeUsers.delete(userId);
+
+                // clear all typing timeouts
+                if (typingUsers.has(userId)) {
+                    const userTyping = typingUsers.get(userId);
+                    Object.keys(userTyping).forEach(key => {
+                        if (key.endsWith("_timer")) {
+                            clearTimeout(userTyping[key]);
+                        }
+                    });
+                    typingUsers.delete(userId);
+                }
+
+                // Update user status in DB - FIX: Added the missing DB update
+                await User.findByIdAndUpdate(userId, { isOnline: false });
+
+                // notify user status change
+                io.emit("active_users", { userId: userId, isOnline: false });
+
+                socket.leave(userId); // leave room
+                console.log(`User disconnected: ${userId}`);
+            } catch (error) {
+                console.error("Error in handleDisconnect:", error);
+            }
+        });
+    });
+
+    // attach the online user map to the socket server for external use
+    io.socketUserMap = activeUsers;
+    
+    return io; // FIX: Moved return outside of connection handler
+};
+
+export { initSocket };
