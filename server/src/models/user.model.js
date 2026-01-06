@@ -34,7 +34,7 @@ const userSchema = new Schema(
             type: String,
             required: true,
             unique: true,
-            lowecase: true,
+            lowercase: true,
             trim: true, 
         },
         fullName: {
@@ -70,6 +70,10 @@ const userSchema = new Schema(
         isOnline:{
             type:Boolean,
             default:false,
+        },
+        expoPushToken: {
+            type: String,
+            default: null,
         },
         refreshToken: {
             type: String

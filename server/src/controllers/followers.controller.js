@@ -4,15 +4,15 @@ import {FollowRequest, REQUEST_STATUS} from "../models/followRequest.model.js"
 import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { Notification,NOTIFICATION_TYPES,entityTypeOptions} from "../models/notification.model.js"
+
 import {ACCOUNT_TYPES} from "../models/user.model.js"
 
-
+import { notificationQueue } from "../helper/queues/index.js";
 
 const toggleFollow = async (req, res) => {
   try {
     const followerId = req.user._id;     // person who clicks follow (sender)
-    // const { followingId } = req.body;    // person being followed
+    
     const {followingId}  = req.params;
     console.log("want to follow this user",followingId);
 
@@ -44,33 +44,50 @@ const toggleFollow = async (req, res) => {
           .json(new ApiResponse(200, existingRequest, "Follow request already sent"));
       }
       
-      const FollowRequestID = await FollowRequest.create({
+      const followRequest  = await FollowRequest.create({
         sender: followerId,
         receiver:followingId,
       });
 
-      if (followerId.toString() != followingId) {
-
-        const existingNotif = await Notification.findOne({
-            receiver: followingId,
-            sender: followerId,
-            type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
-            entityType: entityTypeOptions.FOLLOW,
-            entityId: FollowRequestID._id,
-        });
-
-
-        if (!existingNotif) {
-          await Notification.create({
-            receiver: followingId,
-            sender: followerId,
-            type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
-            entityType: entityTypeOptions.FOLLOW,
-            entityId: FollowRequestID._id,
-          });
+       // 🔥 ONLY enqueue event (no notification DB work here)
+      await notificationQueue.add(
+        "FOLLOW_REQUEST",
+        {
+          receiver: followingId,
+          sender: followerId,
+          entityId: followRequest._id,
+        },
+        {
+          attempts: 5,
+          backoff: { type: "exponential", delay: 3000 },
+          removeOnComplete: true,
+          removeOnFail: false,
         }
-      }
+      );
+      console.log("Follow request created:", followRequest._id);
+      // if (followerId.toString() != followingId) {
+      //   const existingNotif = await Notification.findOne({
+      //       receiver: followingId,
+      //       sender: followerId,
+      //       type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
+      //       entityType: entityTypeOptions.FOLLOW,
+      //       entityId: FollowRequestID._id,
+      //   });
+
+
+      //   if (!existingNotif) {
+      //     await Notification.create({
+      //       receiver: followingId,
+      //       sender: followerId,
+      //       type: NOTIFICATION_TYPES.FOLLOW_REQUEST,
+      //       entityType: entityTypeOptions.FOLLOW,
+      //       entityId: FollowRequestID._id,
+      //     });
+      //   }
+      // }
       
+
+
       
       return res
         .status(200)

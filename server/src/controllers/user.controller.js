@@ -32,6 +32,34 @@ const generateAccessAndRefereshTokens = async(userId) =>{
     }
 }
 
+const savePushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Push token is required",
+      });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      expoPushToken: token,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Push token saved successfully",
+    });
+  } catch (error) {
+    console.error("Save push token error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save push token",
+    });
+  }
+};
+
 const registerUser = async (req, res) => {
   try {
     const { fullName, email, username, password,gender } = req.body;
@@ -425,75 +453,44 @@ const getUserInfo = async (req, res) => {
 
 const searchUser = async (req, res) => {
   try {
-    const { q } = req.params;
-    if (!q) return res.json([]);
-
-    const userInfo = await User.aggregate([
-      {
-        $facet: {
-          // 1️⃣ Username starts with (highest priority)
-          usernameStarts: [
-            { $match: { username: { $regex: "^" + q, $options: "i" } } },
-            { $limit: 10 },
-            { $project: { username: 1, fullName: 1, avatar: 1 } }
-          ],
-
-          // 2️⃣ Full name starts with
-          nameStarts: [
-            { $match: { fullName: { $regex: "^" + q, $options: "i" } } },
-            { $limit: 10 },
-            { $project: { username: 1, fullName: 1, avatar: 1 } }
-          ],
-
-          // 3️⃣ Contains match (lower priority)
-          contains: [
-            { 
-              $match: { 
-                $or: [
-                  { username: { $regex: q, $options: "i" } },
-                  { fullName: { $regex: q, $options: "i" } },
-                ]
-              }
-            },
-            { $limit: 10 },
-            { $project: { username: 1, fullName: 1, avatar: 1 } }
-          ],
-        }
-      },
-
-      // Remove duplicates + merge priority results
-      {
-        $project: {
-          result: {
-            $setUnion: ["$usernameStarts", "$nameStarts", "$contains"]
-          }
-        }
-      },
-
-      // Limit final response
-      {
-        $project: {
-          result: { $slice: ["$result", 20] }
-        }
-      }
-    ]);
-
-    if (!userInfo || userInfo.length === 0) {
-      throw new ApiError(404, "User not found");
+    const q = req.query.q?.toLowerCase().trim();
+    console.log("Search Query:", q);
+    if (!q || q.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query must be at least 2 characters",
+      });
     }
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          userInfo[0],
-          "User info fetched successfully"
-        )
-      );
+    const users = await User.find(
+      {
+        username: {
+          $gte: q,
+          $lt: q + "\uffff",
+        },
+      },
+      {
+        username: 1,
+        fullName: 1,
+        avatar: 1,
+        accountType: 1,
+      }
+    )
+      .limit(20)
+      .lean();
+    
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Search error" });
+    console.error("Search error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Search failed",
+    });
   }
 };
 
@@ -545,7 +542,25 @@ const getUserByIddemo = async (req, res) => {
         .json(new ApiResponse(200, targetUser[0],"Follow request pending"));
       }
       else{
-        throw new ApiError(404, "This account is private request follow to see the profile");
+        // throw new ApiError(404, "This account is private request follow to see the profile");
+        return res.status(200).json(
+        new ApiResponse(
+          200,
+          {
+            _id: targetUser[0]._id,
+            username: targetUser[0].username,
+            avatar: targetUser[0].avatar,
+            accountType: targetUser[0].accountType,
+            followersCount: targetUser[0].followersCount,
+            followingCount: targetUser[0].followingCount,
+            postsCount: targetUser[0].postsCount,
+            bio: targetUser[0].bio,
+          },
+          // targetUser[0],
+          "Account is private"
+        )
+);
+
       }
 
     }else{
@@ -569,5 +584,6 @@ export {
   getCurrentUser,
   getUserInfo,
   searchUser,
-  getUserByIddemo
+  getUserByIddemo,
+  savePushToken
 }

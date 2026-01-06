@@ -78,14 +78,15 @@ const sendMessage = async (req, res) => {
     await conversation.save();
 
     const populated = await message.populate("sender", "username avatar");
-
-      // 🔥 6️⃣ SOCKET EMIT (THIS IS WHAT YOU ASKED)
+    console.log("Populated Message:", populated);
+  
     const io = getIO();
 
     const receivers = conversation.participants.filter(
       (id) => !id.equals(senderId)
     );
-
+    console.log("Receivers:", receivers);
+    
     receivers.forEach((receiverId) => {
       io.to(receiverId.toString()).emit("receive_message", {
         conversationId: conversation._id,

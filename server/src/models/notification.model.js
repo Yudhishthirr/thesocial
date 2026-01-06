@@ -50,7 +50,8 @@ const notificationSchema = new Schema(
     // Which entity does this notification refer to?
     entityType: {
       type: String,
-      enum: entityTypeOptions,
+      // enum: entityTypeOptions,
+      enum: Object.values(entityTypeOptions),
       default: entityTypeOptions.NONE,
     },
 

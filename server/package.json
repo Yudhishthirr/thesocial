@@ -4,7 +4,8 @@
   "description": "the socal network server",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon -r dotenv/config --experimental-json-modules src/server.js"
+    "dev": "nodemon -r dotenv/config --experimental-json-modules src/server.js",
+    "worker": "nodemon -r dotenv/config src/helper/workers/notification.worker.js"
   },
   "type": "module",
   "author": "",
@@ -12,6 +13,7 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
+    "bullmq": "^5.66.4",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
