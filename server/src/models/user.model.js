@@ -53,6 +53,15 @@ const userSchema = new Schema(
         avatar: {
             type: String, // cloudinary url
         },
+        isAi:{
+            type: Boolean,
+            default:false,
+        },
+        aiProfile: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Aiprofile",
+            default: null,
+        },
         password: {
             type: String,
             required: [true, 'Password is required']
